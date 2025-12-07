@@ -4,6 +4,7 @@ The goal is to learn each piece of the EKS ecosystem by configuring it manually 
 
 
 # Architecture Overview
+![Diagram](game-2048.png)
 
 A public-facing ALB handles incoming HTTP traffic.
 The ALB Ingress Controller maps these rules to Kubernetes Ingress.
