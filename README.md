@@ -61,7 +61,7 @@ eksctl delete cluster --name <cluster-name> --region us-west-2
 - Update kubeconfig to access cluster: From AWS Console → EKS → Cluster → Config Instructions
 Or run:
 ```
-aws eks update-kubeconfig --name <cluster-name>
+aws eks update-kubeconfig --name <cluster-name> --region us-west-2
 ```
 
 - Useful commands:
@@ -75,7 +75,7 @@ check current cluster: `kubectl get nodes`
 
 - Create Fargate profile:
 ```
-eksctl create fargateprofile --cluster demo-cluster --region us-east-1 --name alb-sample-app --namespace game-2048
+eksctl create fargateprofile --cluster demo-cluster --region us-west-2 --name alb-sample-app --namespace game-2048
 ```
 - Deploy the sample app (Deployment + Service + Ingress):
 ```
@@ -91,7 +91,7 @@ aws iam list-open-id-connect-providers | grep $oidc_id | cut -d "/" -f4
 ```
 - If not present:
 ```
-eksctl utils associate-iam-oidc-provider --cluster $cluster_name --approve
+eksctl utils associate-iam-oidc-provider --cluster $cluster_name --region us-west-2 --approve
 ```
   
 
@@ -99,7 +99,7 @@ eksctl utils associate-iam-oidc-provider --cluster $cluster_name --approve
 
 - Download IAM policy:
 ```
-curl -O https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v2.11.0/docs/install/iam_policy.json
+curl -O https://raw.githubusercontent.com/istiak-devsecops/game-2048/refs/heads/main/iam_policy.json
 ```
 - Create IAM Policy:
 ```
@@ -112,7 +112,7 @@ eksctl create iamserviceaccount \
   --namespace=kube-system \
   --name=aws-load-balancer-controller \
   --role-name AmazonEKSLoadBalancerControllerRole \
-  --attach-policy-arn=arn:aws:iam::<your-account-id>:policy/AWSLoadBalancerControllerIAMPolicy \
+  --attach-policy-arn=arn:aws:iam::<your-account-id>:policy/AWSLoadBalancerControllerIAMPolicy --region us-west-2 \
   --approve
 ```
 
