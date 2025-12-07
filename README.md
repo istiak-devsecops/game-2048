@@ -1,63 +1,138 @@
-# Kubernetes-DevOps-Labs
 
-A growing collection of Kubernetes labs for DevOps & Cloud practice
-(by Istiak / istiak-devsecops)
+This repo walks through deploying the classic 2048 web game on an Amazon EKS cluster using Fargate, ALB Ingress Controller, and IAM OIDC integration.
+The goal is to learn each piece of the EKS ecosystem by configuring it manually — cluster creation, Fargate profiles, IAM roles, OIDC, Ingress, and the ALB controller — and then combining them into a clean, production-style deployment.
 
---- 
 
-## Overview
+# Architecture Overview
 
-This repo is a work in progress — I keep adding new Kubernetes examples as I learn, experiment, and build real DevOps workflows.
-Think of it as a hands-on playground for Kubernetes: deployments, services, ingress, configs, autoscaling, Helm, and monitoring with Prometheus/Grafana.
-If you’re learning Kubernetes or you want ready-to-run examples for your own cluster, you’ll find practical, minimal, and reusable manifests here.
+A public-facing ALB handles incoming HTTP traffic.
+The ALB Ingress Controller maps these rules to Kubernetes Ingress.
+Traffic flows:
 
+`Client → ALB → Ingress → Service → Pod`
+
+Everything runs on Fargate, so the underlying compute is fully managed.
 ---
 
-## Current Labs
 
-Here are the labs currently included (the list will grow over time):
+## 🚀 Step 1: Prerequisites
+- Install kubectl: https://kubernetes.io/docs/tasks/tools/
+- Run this command:
+```
+curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+chmod +x kubectl
+sudo mv kubectl /usr/local/bin/
+```
 
-…	more coming soon
+- Install AWS CLI: https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html
+- Run this command:
+```
+sudo apt remove awscli
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+unzip awscliv2.zip
+sudo ./aws/install
+```
+- Check its installed correctly: `aws version --client`
 
-(Expect regular updates as I add more labs.)
+- Configure AWS CLI to use in local machine terminal: `aws configure`
 
+(Use access keys from AWS → Security Credentials)
+
+- Install eksctl: https://docs.aws.amazon.com/eks/latest/userguide/install-kubectl.html#eksctl-install-update
+- Run this command:
+```
+curl -sL "https://github.com/eksctl-io/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
+sudo mv /tmp/eksctl /usr/local/bin
+```
+- Check if its installed correctly: `eksctl version`
 ---
 
-## How to Use
-1. Clone the repo
-```bash
-git clone https://github.com/istiak-devsecops/kubernetes-devops-labs.git
-cd kubernetes-devops-labs
+## 🚀 Step 2: Create the EKS Cluster
+- Create cluster using Fargate:
 ```
-2. Make sure you have the basics installed
-```bash
-kubectl
-Docker
-Minikube / Kind / k3d (any local cluster works)
-Helm (for Helm labs)
+eksctl create cluster --name <cluster-name> --region us-west-2 --fargate
 ```
-3. Enter any lab folder and apply the manifests
-```bash
-cd deployments/
-kubectl apply -f .
+- Delete when needed:
 ```
-4. Clean up when finished
-```bash
-kubectl delete -f .
+eksctl delete cluster --name <cluster-name> --region us-west-2
 ```
-5. For Helm labs
-```bash
-cd helm/simple-chart
-helm install demo .
-```
-6. For Monitoring labs
-```bash
-helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-helm install monitor prometheus-community/kube-prometheus-stack
-```
---- 
 
-## Contribution
+- Update kubeconfig to access cluster: From AWS Console → EKS → Cluster → Config Instructions
+Or run:
+```
+aws eks update-kubeconfig --name <cluster-name>
+```
 
-This is an open repo — contributions, suggestions, and improvements are welcome.
-Keep it simple, clean, and practical — that’s the goal of these labs.
+- Useful commands:
+```
+access a cluster: `kubectl config use-context <cluster-name>`
+list of available cluster: `kubectl config get-contexts`
+check current cluster: `kubectl get nodes`
+```
+
+## 🚀 Step 3: Fargate Profile + App Deployment
+
+- Create Fargate profile:
+```
+eksctl create fargateprofile --cluster demo-cluster --region us-east-1 --name alb-sample-app --namespace game-2048
+```
+- Deploy the sample app (Deployment + Service + Ingress):
+```
+kubectl apply -f manifest.yaml
+```
+  
+
+## 🚀 Step 4: Configure OIDC Provider
+
+- Check if OIDC provider already exists:
+```
+aws iam list-open-id-connect-providers | grep $oidc_id | cut -d "/" -f4
+```
+- If not present:
+```
+eksctl utils associate-iam-oidc-provider --cluster $cluster_name --approve
+```
+  
+
+## 🚀 Step 5: IAM Policy & IAM Service Account
+
+- Download IAM policy:
+```
+curl -O https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v2.11.0/docs/install/iam_policy.json
+```
+- Create IAM Policy:
+```
+aws iam create-policy --policy-name AWSLoadBalancerControllerIAMPolicy --policy-document file://iam_policy.json
+```
+- Create IAM Role for ALB Controller:
+```
+eksctl create iamserviceaccount \
+  --cluster=<your-cluster-name> \
+  --namespace=kube-system \
+  --name=aws-load-balancer-controller \
+  --role-name AmazonEKSLoadBalancerControllerRole \
+  --attach-policy-arn=arn:aws:iam::<your-account-id>:policy/AWSLoadBalancerControllerIAMPolicy \
+  --approve
+```
+
+## 🚀 Step 6: Install ALB Ingress Controller (Helm)
+
+- Add Helm repo:
+```
+helm repo add eks https://aws.github.io/eks-charts
+helm repo update eks
+```
+- Install controller:
+```
+helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
+  -n kube-system \
+  --set clusterName=<your-cluster-name> \
+  --set serviceAccount.create=false \
+  --set serviceAccount.name=aws-load-balancer-controller \
+  --set region=<your-region> \
+  --set vpcId=<your-vpc-id>
+```
+- Verify deployment:
+```
+kubectl get deployment -n kube-system aws-load-balancer-controller
+```
